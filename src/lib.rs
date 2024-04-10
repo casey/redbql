@@ -125,19 +125,21 @@ macro_rules! table {
 // This is commented out, because I can't get it to compile T_T
 #[cfg(any())]
 mod ext {
+  use {super::*, redb::Database};
+
   trait DatabaseExt {
-    fn run<'a, T, Q>(&self, query: Q) -> Result<Q::Output, Q::Error>
+    fn execute<'a, T, S>(&self, statement: S) -> Result<S::Output, S::Error>
     where
-      Q: Query<'a, T>;
+      S: Statement<'a, T>;
   }
 
   impl DatabaseExt for Database {
-    fn run<'a, T, Q>(&self, query: Q) -> Result<Q::Output, Q::Error>
+    fn execute<'a, T, S>(&self, statement: S) -> Result<S::Output, S::Error>
     where
-      Q: Query<'a, T>,
+      S: Statement<'a, T>,
     {
       let tx = self.begin_write().map_err(|err| redb::Error::from(err))?;
-      let result = query.run(&tx)?;
+      let result = statement.execute(&tx)?;
       tx.commit().map_err(|err| redb::Error::from(err))?;
       Ok(result)
     }
