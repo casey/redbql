@@ -153,7 +153,7 @@ mod tests {
   }
 
   #[test]
-  fn join() {
+  fn redbql() {
     fn initialize(mut names: NamesMut) -> Result<(), redb::Error> {
       names.0.insert("james", "smith")?;
       Ok(())
