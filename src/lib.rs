@@ -18,8 +18,20 @@ trait StatementArg<'a>: Sized {
   fn from_tx(tx: &'a WriteTransaction) -> Result<Self, redb::Error>;
 }
 
+impl<'a> StatementArg<'a> for &'a WriteTransaction {
+  fn from_tx(tx: &'a WriteTransaction) -> Result<Self, redb::Error> {
+    Ok(tx)
+  }
+}
+
 trait QueryArg<'a>: Sized {
   fn from_tx(tx: &'a ReadTransaction) -> Result<Self, redb::Error>;
+}
+
+impl<'a> QueryArg<'a> for &'a ReadTransaction {
+  fn from_tx(tx: &'a ReadTransaction) -> Result<Self, redb::Error> {
+    Ok(tx)
+  }
 }
 
 impl<'a, F, O, E, T0> Query<'a, (T0,)> for F
