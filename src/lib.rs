@@ -1,6 +1,6 @@
 use redb::{ReadTransaction, WriteTransaction};
 
-pub trait Query<'a, T> {
+pub trait Query<'a, T = ()> {
   type Output;
   type Error: From<redb::Error>;
 
@@ -148,41 +148,91 @@ mod ext {
 
 #[cfg(test)]
 mod tests {
-  use {super::*, redb::Database};
+  use {super::*, redb::Database, tempfile::TempDir};
 
   table! {
     Names, NamesMut, NAMES, &'static str, &'static str
   }
 
-  #[test]
-  fn redbql() {
-    fn initialize(mut names: NamesMut) -> Result<(), redb::Error> {
-      names.0.insert("james", "smith")?;
-      Ok(())
-    }
+  fn initialize(mut names: NamesMut) -> Result<(), redb::Error> {
+    names.0.insert("james", "smith")?;
+    Ok(())
+  }
 
+  fn create() -> (TempDir, Database) {
+    let dir = TempDir::new().unwrap();
+
+    let database = Database::create(dir.path().join("database.redb")).unwrap();
+
+    let tx = database.begin_write().unwrap();
+
+    initialize.execute(&tx).unwrap();
+
+    tx.commit().unwrap();
+
+    (dir, database)
+  }
+
+  #[test]
+  fn function() {
     fn get(names: Names) -> Result<Option<String>, redb::Error> {
       Ok(names.0.get("james")?.map(|guard| guard.value().into()))
     }
 
-    let dir = tempfile::TempDir::new().unwrap();
+    let (_dir, database) = create();
 
-    let database = Database::create(dir.path().join("database.redb")).unwrap();
+    let tx = database.begin_read().unwrap();
 
-    {
-      let tx = database.begin_write().unwrap();
+    let result = get.run(&tx).unwrap();
 
-      initialize.execute(&tx).unwrap();
+    assert_eq!(result, Some("smith".into()));
+  }
 
-      tx.commit().unwrap();
+  #[test]
+  fn closure() {
+    let (_dir, database) = create();
+
+    let tx = database.begin_read().unwrap();
+
+    let name = "james";
+
+    let query = |names: Names| -> Result<Option<String>, redb::Error> {
+      Ok(names.0.get(name)?.map(|guard| guard.value().into()))
+    };
+
+    let result = query.run(&tx).unwrap();
+
+    assert_eq!(result, Some("smith".into()));
+  }
+
+  #[test]
+  fn object() {
+    struct Foo {
+      name: String,
     }
 
-    {
-      let tx = database.begin_read().unwrap();
+    impl<'a> Query<'a> for Foo {
+      type Output = Option<String>;
+      type Error = redb::Error;
 
-      let result = get.run(&tx).unwrap();
-
-      assert_eq!(result, Some("smith".into()));
+      fn run(self, tx: &'a ReadTransaction) -> Result<Self::Output, Self::Error> {
+        let closure = |names: Names| -> Result<Option<String>, redb::Error> {
+          Ok(names.0.get(&*self.name)?.map(|guard| guard.value().into()))
+        };
+        closure.run(tx)
+      }
     }
+
+    let (_dir, database) = create();
+
+    let tx = database.begin_read().unwrap();
+
+    let result = Foo {
+      name: "james".into(),
+    }
+    .run(&tx)
+    .unwrap();
+
+    assert_eq!(result, Some("smith".into()));
   }
 }
