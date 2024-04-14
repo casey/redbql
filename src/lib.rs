@@ -106,6 +106,19 @@ macro_rules! table {
     const $name: ::redb::TableDefinition<'static, $key, $value> =
       ::redb::TableDefinition::new(stringify!($name));
 
+    impl<'a> core::ops::Deref for $rw<'a> {
+      type Target = ::redb::Table<'a, $key, $value>;
+      fn deref(&self) -> &Self::Target {
+        &self.0
+      }
+    }
+
+    impl<'a> core::ops::DerefMut for $rw<'a> {
+      fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+      }
+    }
+
     impl<'a> StatementArg<'a> for $rw<'a> {
       fn from_tx(tx: &'a ::redb::WriteTransaction) -> Result<Self, ::redb::Error> {
         Ok(Self(tx.open_table($name)?))
@@ -113,6 +126,19 @@ macro_rules! table {
     }
 
     struct $ro(::redb::ReadOnlyTable<$key, $value>);
+
+    impl core::ops::Deref for $ro {
+      type Target = ::redb::ReadOnlyTable<$key, $value>;
+      fn deref(&self) -> &Self::Target {
+        &self.0
+      }
+    }
+
+    impl core::ops::DerefMut for $ro {
+      fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+      }
+    }
 
     impl<'a> QueryArg<'a> for $ro {
       fn from_tx(tx: &'a ::redb::ReadTransaction) -> Result<Self, ::redb::Error> {
@@ -155,7 +181,7 @@ mod tests {
   }
 
   fn initialize(mut names: NamesMut) -> Result<(), redb::Error> {
-    names.0.insert("james", "smith")?;
+    names.insert("james", "smith")?;
     Ok(())
   }
 
@@ -176,7 +202,7 @@ mod tests {
   #[test]
   fn function() {
     fn get(names: Names) -> Result<Option<String>, redb::Error> {
-      Ok(names.0.get("james")?.map(|guard| guard.value().into()))
+      Ok(names.get("james")?.map(|guard| guard.value().into()))
     }
 
     let (_dir, database) = create();
@@ -197,7 +223,7 @@ mod tests {
     let name = "james";
 
     let query = |names: Names| -> Result<Option<String>, redb::Error> {
-      Ok(names.0.get(name)?.map(|guard| guard.value().into()))
+      Ok(names.get(name)?.map(|guard| guard.value().into()))
     };
 
     let result = query.run(&tx).unwrap();
@@ -217,7 +243,7 @@ mod tests {
 
       fn run(self, tx: &'a ReadTransaction) -> Result<Self::Output, Self::Error> {
         let closure = |names: Names| -> Result<Option<String>, redb::Error> {
-          Ok(names.0.get(&*self.name)?.map(|guard| guard.value().into()))
+          Ok(names.get(&*self.name)?.map(|guard| guard.value().into()))
         };
         closure.run(tx)
       }
